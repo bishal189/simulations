@@ -1,135 +1,97 @@
-/*
- * SKEE3223 - Problem 1: Digital Thermometer in Celsius
- *
- * Hardware:
- *   LM35DZ       -> PA0 (ADC0)
- *   Segments a-g -> PORTB (PB0-PB6) via 220 ohm resistors
- *   Digit select -> PORTD (PD0=hundreds, PD1=tens, PD2=units)
- *
- * Clock: 8 MHz external crystal
- */
-
+#define F_CPU 1000000UL // Define internal clock speed as 1 MHz for delay utilities
 #include <avr/io.h>
 #include <util/delay.h>
 
-/* Common cathode: bit HIGH = segment ON (PB0=a ... PB6=g) */
-static const uint8_t SEG_LUT[10] = {
-    0b00111111, /* 0 */
-    0b00000110, /* 1 */
-    0b01011011, /* 2 */
-    0b01001111, /* 3 */
-    0b01100110, /* 4 */
-    0b01101101, /* 5 */
-    0b01111101, /* 6 */
-    0b00000111, /* 7 */
-    0b01111111, /* 8 */
-    0b01101111  /* 9 */
+// 7-Segment Lookup Table for Common Anode Displays (Digits 0-9)
+// In Common Anode, a '0' bit turns the segment ON, and a '1' bit turns it OFF.
+unsigned char seg_code[] = {
+    0xC0, // 0
+    0xF9, // 1
+    0xA4, // 2
+    0xB0, // 3
+    0x99, // 4
+    0x92, // 5
+    0x82, // 6
+    0xF8, // 7
+    0x80, // 8
+    0x90  // 9
 };
 
-#define DIGIT_OFF      0x07  /* PD2 PD1 PD0 = 111 all digits off */
-#define DIGIT_HUNDREDS 0x06  /* 110 PD0 low = hundreds on */
-#define DIGIT_TENS     0x05  /* 101 PD1 low = tens on */
-#define DIGIT_UNITS    0x03  /* 011 PD2 low = units on */
-
-static uint8_t digit_h;
-static uint8_t digit_t;
-static uint8_t digit_u;
-static uint8_t scan_pos;
-
-static void gpio_init(void)
-{
-    DDRB  = 0xFF;
-    DDRD |= 0x07;
-    PORTD |= DIGIT_OFF;
+// Initialize the Analog-to-Digital Converter peripheral
+void ADC_init() {
+    // Select internal 2.56V reference voltage source (REFS1=1, REFS0=1)
+    // Pin PA0 is chosen by default as input channel (MUX4:0 = 00000)
+    ADMUX = (1 << REFS1) | (1 << REFS0);
+    
+    // Enable the ADC module (ADEN=1)
+    // Set division factor to 64 for clock prescaling (ADPS2=1, ADPS1=1)
+    // This keeps the ADC clock running stably at a safe frequency
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);
 }
 
-static uint16_t adc_read(void);
-static void adc_init(void);
-
-static void adc_init(void)
-{
-    ADMUX  = (1 << REFS0);  /* AVCC reference, channel ADC0 */
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1); /* prescaler 64 */
-    _delay_ms(10);
-    adc_read(); /* discard first conversion */
-}
-
-static uint16_t adc_read(void)
-{
+// Read the raw 10-bit digital value from a specific ADC channel
+unsigned int ADC_read(unsigned char channel) {
+    // Clear the existing channel selection bits safely, then set the new target channel
+    ADMUX = (ADMUX & 0xE0) | (channel & 0x07);
+    
+    // Start the conversion process (ADSC=1)
     ADCSRA |= (1 << ADSC);
-    while (ADCSRA & (1 << ADSC))
-        ;
-    return ADC;
+    
+    // Hardware polling: Wait loop until the conversion finishes (ADSC returns to 0)
+    while (ADCSRA & (1 << ADSC));
+    
+    // Return the combined 10-bit outcome register (ADCL + ADCH)
+    return ADCW;
 }
 
-static uint16_t read_temperature(void)
-{
-    uint32_t sum = 0;
-
-    for (uint8_t i = 0; i < 8; i++) {
-        sum += adc_read();
-        _delay_ms(2);
-    }
-
-    /* LM35: 10 mV/C -> Temp = ADC * 500 / 1024, with rounding */
-    return (uint16_t)((sum * 500UL + 4096UL) / 8192UL);
-}
-
-static void update_digits(uint16_t temp)
-{
-    if (temp > 199)
-        temp = 199;
-
-    digit_h = temp / 100;
-    digit_t = (temp / 10) % 10;
-    digit_u = temp % 10;
-}
-
-static void show_digit(uint8_t pattern, uint8_t select)
-{
-    PORTD |= DIGIT_OFF;
-    PORTB  = pattern;
-    PORTD  = (PORTD & 0xF8) | select;
-}
-
-static void display_scan(void)
-{
-    PORTD |= DIGIT_OFF;
-
-    switch (scan_pos) {
-    case 0:
-        if (digit_h)
-            show_digit(SEG_LUT[digit_h], DIGIT_HUNDREDS);
-        break;
-    case 1:
-        if (digit_h || digit_t)
-            show_digit(SEG_LUT[digit_t], DIGIT_TENS);
-        break;
-    default:
-        show_digit(SEG_LUT[digit_u], DIGIT_UNITS);
-        break;
-    }
-
-    scan_pos++;
-    if (scan_pos > 2)
-        scan_pos = 0;
-}
-
-static void refresh_display(void)
-{
-    for (uint8_t i = 0; i < 60; i++) {
-        display_scan();
-        _delay_ms(1);
-    }
-}
-
-int main(void)
-{
-    gpio_init();
-    adc_init();
-
+int main(void) {
+    // Port System Setup
+    DDRB = 0xFF;  // Configure all PORTB pins (PB0-PB6) as outputs for segment data lines
+    DDRC = 0x07;  // Configure PC0, PC1, PC2 as outputs for digit control multiplex pins
+    
+    ADC_init();   // Turn on and configure ADC configurations
+    
+    unsigned int raw_adc = 0;
+    unsigned int celsius_temp = 0;
+    unsigned char hundreds = 0;
+    unsigned char tens = 0;
+    unsigned char units = 0;
+    
     while (1) {
-        update_digits(read_temperature());
-        refresh_display();
+        // 1. Fetch raw voltage reading from LM35 connected to channel 0 (PA0)
+        raw_adc = ADC_read(0);
+        
+        // 2. Linear Scaling Math Transformation
+        // Using Internal 2.56V reference: (raw_adc * 2.56V) / (1023 steps * 10mV/C)
+        celsius_temp = (raw_adc * 256) / 1023;
+        
+        // 3. Mathematical Digit Extraction (Integer Breakdown)
+        hundreds = celsius_temp / 100;          // Isolate hundreds column
+        tens     = (celsius_temp % 100) / 10;   // Isolate tens column
+        units    = celsius_temp % 10;           // Isolate units column
+        
+        // 4. Time-Multiplexing Driving Loop
+        // Refreshes the display columns rapidly to trick human persistence of vision (POV)
+        for (int refresh = 0; refresh < 15; refresh++) {
+            
+            // --- Display Column 1: Hundreds Digit ---
+            PORTB = 0xFF;               // Ghosting Prevention: Instantly clear segment signals
+            PORTC = 0x01;               // Ground pin 1 line (PC0) to focus power on Digit 1
+            PORTB = seg_code[hundreds]; // Output digit hex mapping 
+            _delay_ms(4);               // Keep active briefly
+            
+            // --- Display Column 2: Tens Digit ---
+            PORTB = 0xFF;               // Ghosting Prevention: Instantly clear segment signals
+            PORTC = 0x02;               // Ground pin 2 line (PC1) to focus power on Digit 2
+            PORTB = seg_code[tens];     // Output digit hex mapping
+            _delay_ms(4);               // Keep active briefly
+            
+            // --- Display Column 3: Units Digit ---
+            PORTB = 0xFF;               // Ghosting Prevention: Instantly clear segment signals
+            PORTC = 0x04;               // Ground pin 3 line (PC2) to focus power on Digit 3
+            PORTB = seg_code[units];    // Output digit hex mapping
+            _delay_ms(4);               // Keep active briefly
+        }
     }
+    return 0;
 }
