@@ -25,7 +25,6 @@ void ADC_init() {
     
     // Enable the ADC module (ADEN=1)
     // Set division factor to 64 for clock prescaling (ADPS2=1, ADPS1=1)
-    // This keeps the ADC clock running stably at a safe frequency
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);
 }
 
@@ -53,6 +52,7 @@ int main(void) {
     
     unsigned int raw_adc = 0;
     unsigned int celsius_temp = 0;
+    unsigned int fahrenheit_temp = 0; // Variable to hold converted Fahrenheit temperature
     unsigned char hundreds = 0;
     unsigned char tens = 0;
     unsigned char units = 0;
@@ -61,16 +61,20 @@ int main(void) {
         // 1. Fetch raw voltage reading from LM35 connected to channel 0 (PA0)
         raw_adc = ADC_read(0);
         
-        // 2. Linear Scaling Math Transformation
+        // 2. Step 1: Linear Scaling to get Celsius base
         // Using Internal 2.56V reference: (raw_adc * 2.56V) / (1023 steps * 10mV/C)
         celsius_temp = (raw_adc * 256) / 1023;
         
-        // 3. Mathematical Digit Extraction (Integer Breakdown)
-        hundreds = celsius_temp / 100;          // Isolate hundreds column
-        tens     = (celsius_temp % 100) / 10;   // Isolate tens column
-        units    = celsius_temp % 10;           // Isolate units column
+        // 3. Step 2: Convert Celsius to Fahrenheit using high-speed integer math
+        // Algebraic Formula: F = (C * 9 / 5) + 32
+        fahrenheit_temp = ((celsius_temp * 9) / 5) + 32;
         
-        // 4. Time-Multiplexing Driving Loop
+        // 4. Mathematical Digit Extraction from the Fahrenheit Value
+        hundreds = fahrenheit_temp / 100;          // Isolate hundreds column
+        tens     = (fahrenheit_temp % 100) / 10;   // Isolate tens column
+        units    = fahrenheit_temp % 10;           // Isolate units column
+        
+        // 5. Time-Multiplexing Driving Loop
         // Refreshes the display columns rapidly to trick human persistence of vision (POV)
         for (int refresh = 0; refresh < 15; refresh++) {
             
