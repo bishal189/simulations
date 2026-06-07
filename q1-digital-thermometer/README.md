@@ -1,142 +1,399 @@
 # Q1 — Digital Thermometer in Celsius
 
-**Course:** SKEE3223 Microprocessor | **Sensor:** LM35DZ | **MCU:** ATmega32 | **Display:** 3× 7-segment
+**MCU:** ATmega32 | **Sensor:** LM35DZ | **Display:** 3× 7-segment (common cathode)
+
+Follow this guide **wire by wire** in Proteus. Every connection is numbered.
 
 ---
 
-## What You Must Deliver (from assignment)
+## Step 1 — Place Components on Proteus Canvas
 
-| Item | What to submit |
-|------|----------------|
-| Interface circuit | Full schematic in **Proteus** |
-| C program | Written in IDE, compiled to **.hex** |
-| Simulation | Proteus run with sample outputs (screenshots) |
-| Report | Abstract, Introduction, Methodology, Results, Conclusion |
-| Software design | Flowchart or pseudocode |
-| Code listing | Full C code with comments |
+Place components in this layout (left to right):
 
-> **Note:** The assignment header says *ARM Cortex-M4 / STM32CubeIDE*, but **Problem 1 explicitly says ATmega32**. Proteus has excellent ATmega32 support — use ATmega32 unless your lecturer says otherwise.
+```
++------------------------------------------------------------------+
+|                                                                  |
+|   [POWER]          [ATmega32]         [7-Seg] [7-Seg] [7-Seg]   |
+|   TERMINAL         (centre)           (Hundreds)(Tens) (Units) |
+|                                                                  |
+|   [LM35]           [CRYSTAL]                                     |
+|                    [C1][C2]                                      |
+|                    [R1 10k]                                      |
+|                                                                  |
++------------------------------------------------------------------+
+```
+
+### Component list — search and place these in Proteus
+
+| Label | Proteus search name | Quantity |
+|-------|---------------------|----------|
+| U1 | `ATMEGA32` | 1 |
+| U2 | `LM35` | 1 |
+| DISP1 | `7SEG-COM-CATHODE-GRN` | 1 (Hundreds) |
+| DISP2 | `7SEG-COM-CATHODE-GRN` | 1 (Tens) |
+| DISP3 | `7SEG-COM-CATHODE-GRN` | 1 (Units) |
+| Y1 | `CRYSTAL` (8 MHz) | 1 |
+| C1, C2 | `CAP` (22 pF) | 2 |
+| C3 | `CAP` (100 nF) | 1 |
+| R1 | `RES` (10 kΩ) | 1 |
+| PWR | `POWER` or `TERMINAL` | 1 |
+
+Set **POWER** terminals: `+5V` and `GND`
 
 ---
 
-## How the System Works
+## Step 2 — ATmega32 Pin Map (reference)
 
 ```
-LM35DZ ──(analog 10 mV/°C)──► ATmega32 ADC (PA0)
-                                      │
-                              Convert to °C
-                                      │
-                         Split into 3 digits (H T U)
-                                      │
-                    Multiplex scan ──► 3× 7-segment display
-```
-
-**LM35DZ:** Output voltage = **10 mV × temperature (°C)**  
-At 25 °C → 250 mV | At 100 °C → 1000 mV (1 V)
-
-**Formula (5 V reference, 10-bit ADC):**
-
-```
-Temperature (°C) = ADC_reading × 500 / 1024
+                    ATmega32 (U1)
+              ┌─────────────────────┐
+         PB0  │ 1               40 │  PA0  (ADC0)  ← LM35
+         PB1  │ 2               39 │  PA1
+         PB2  │ 3               38 │  PA2
+         PB3  │ 4               37 │  PA3
+         PB4  │ 5               36 │  PA4
+         PB5  │ 6               35 │  PA5
+         PB6  │ 7               34 │  PA6
+         PB7  │ 8               33 │  PA7
+    RESET  │ 9               32 │  AREF
+         VCC  │10               31 │  GND
+         GND  │11               30 │  AVCC
+       XTAL2  │12               29 │  PC7
+       XTAL1  │13               28 │  PC6
+         PD0  │14               27 │  PC5
+         PD1  │15               26 │  PC4
+         PD2  │16               25 │  PC3
+         PD3  │17               24 │  PC2
+         PD4  │18               23 │  PC1
+         PD5  │19               22 │  PC0
+         PD6  │20               21 │  PD7
+              └─────────────────────┘
 ```
 
 ---
 
-## Proteus Circuit (step-by-step)
+## Step 3 — Connect Every Wire (follow in order)
 
-### Components to place
+### POWER wires
 
-1. **ATmega32** (or ATMEGA32L)
-2. **LM35DZ** (search: `LM35`)
-3. **3× 7SEG-COM-CATHODE** (or COM-ANODE — match your code)
-4. **CRYSTAL** 8 MHz + 2× 22 pF capacitors
-5. **RES** 10 kΩ (reset pull-up)
-6. **CAP** 100 nF (VCC decoupling)
-7. **POT-HG** (optional — to test ADC without LM35)
+| Wire | From | To |
+|------|------|----|
+| W1 | POWER `+5V` | U1 pin 10 (VCC) |
+| W2 | POWER `+5V` | U1 pin 30 (AVCC) |
+| W3 | POWER `+5V` | U2 pin 1 (V+) |
+| W4 | POWER `+5V` | R1 pin 1 |
+| W5 | POWER `GND` | U1 pin 11 (GND) |
+| W6 | POWER `GND` | U1 pin 31 (GND) |
+| W7 | POWER `GND` | U2 pin 3 (GND) |
+| W8 | POWER `GND` | C1 pin 2 |
+| W9 | POWER `GND` | C2 pin 2 |
+| W10 | POWER `GND` | C3 pin 2 |
 
-### Power & clock
+### RESET wire
 
-- VCC = 5 V, GND common
-- Crystal on XTAL1/XTAL2 with 22 pF caps to GND
-- RESET pin via 10 kΩ to VCC
+| Wire | From | To |
+|------|------|----|
+| W11 | R1 pin 2 | U1 pin 9 (RESET) |
 
-### LM35 wiring
+### Decoupling capacitor
 
-| LM35 pin | Connect to |
-|----------|------------|
-| V+       | +5 V       |
-| Vout     | **PA0 / ADC0** (pin 40) |
-| GND      | GND        |
+| Wire | From | To |
+|------|------|----|
+| W12 | POWER `+5V` | C3 pin 1 |
+| W13 | C3 pin 2 | POWER `GND` |
 
-### 7-segment wiring (common cathode)
+Place C3 close to U1 VCC pin.
 
-**Segment bus (shared by all 3 digits)** — connect to **PORTB**:
+### Clock circuit
 
-| Segment | PORTB pin | ATmega32 pin |
-|---------|-----------|--------------|
-| a       | PB0       | 1            |
-| b       | PB1       | 2            |
-| c       | PB2       | 3            |
-| d       | PB3       | 4            |
-| e       | PB4       | 5            |
-| f       | PB5       | 6            |
-| g       | PB6       | 7            |
+| Wire | From | To |
+|------|------|----|
+| W14 | U1 pin 13 (XTAL1) | Y1 pin 1 |
+| W15 | U1 pin 12 (XTAL2) | Y1 pin 2 |
+| W16 | Y1 pin 1 | C1 pin 1 |
+| W17 | C1 pin 2 | POWER `GND` |
+| W18 | Y1 pin 2 | C2 pin 1 |
+| W19 | C2 pin 2 | POWER `GND` |
 
-**Digit select (common cathode → GND when ON)** — **PORTD**:
+```
+         GND
+          |
+         [C1 22pF]
+          |
+U1 pin13 -+---[ Y1 8MHz ]---+- U1 pin12
+          |                  |
+         [C2 22pF]          |
+          |                  |
+         GND                GND
+```
 
-| Digit        | PORTD pin | ATmega32 pin | Shows |
-|--------------|-----------|--------------|-------|
-| Hundreds     | PD0       | 14           | 0–1   |
-| Tens         | PD1       | 15           | 0–9   |
-| Units        | PD2       | 16           | 0–9   |
+### LM35 sensor
 
-- Common cathode of each display → corresponding PD pin (through 220 Ω if needed)
-- When PDx = **LOW**, that digit is **ON**
+| Wire | From | To |
+|------|------|----|
+| W20 | U2 pin 2 (Vout) | U1 pin 40 (PA0) |
 
-### Load the hex file in Proteus
+(W1, W3, W7 already connect LM35 power and ground)
 
-1. Double-click ATmega32 → **Program File** → browse to `digital_thermometer.hex`
-2. Set **Clock Frequency** = `8000000` (8 MHz)
-3. Run simulation ▶
-
-### Test temperature in Proteus
-
-- Double-click **LM35** → set **Temperature** property (e.g. 25, 37, 99)
-- Or use **POT** on ADC pin and adjust voltage: **V = °C × 0.01**
+```
+    +5V ---- W3 ---- U2 pin1 (V+)
+                      |
+                   [LM35]
+                      |
+    PA0 ---- W20 ---- U2 pin2 (Vout)
+                      |
+    GND ---- W7 ---- U2 pin3 (GND)
+```
 
 ---
 
-## Build the firmware
+## Step 4 — Seven-Segment Display Pin Layout
 
-### Option A — AVR-GCC (recommended for ATmega32)
+Each display (`7SEG-COM-CATHODE-GRN`) has these pins:
 
-```bash
-cd firmware
-make
-# Output: digital_thermometer.hex
+```
+         ┌───┐
+      f  │   │  b
+         │ a │
+      e  │ g │  c
+         │ d │
+         └───┘
+            COM (common cathode)
 ```
 
-Requires: `avr-gcc`, `avr-libc`, `avr-objcopy`
+| Display pin | Name |
+|-------------|------|
+| a | Top segment |
+| b | Top-right segment |
+| c | Bottom-right segment |
+| d | Bottom segment |
+| e | Bottom-left segment |
+| f | Top-left segment |
+| g | Middle segment |
+| COM | Common cathode (digit enable) |
+
+**Do not connect `dp` (decimal point) — leave it unconnected.**
+
+---
+
+## Step 5 — Segment Bus (shared by all 3 displays)
+
+Connect the **same segment letter** from all 3 displays together, then to one PORTB pin.
+
+```
+DISP1.a ──┐
+DISP2.a ──┼── W21 ── U1 pin 1  (PB0)
+DISP3.a ──┘
+
+DISP1.b ──┐
+DISP2.b ──┼── W22 ── U1 pin 2  (PB1)
+DISP3.b ──┘
+
+DISP1.c ──┐
+DISP2.c ──┼── W23 ── U1 pin 3  (PB2)
+DISP3.c ──┘
+
+DISP1.d ──┐
+DISP2.d ──┼── W24 ── U1 pin 4  (PB3)
+DISP3.d ──┘
+
+DISP1.e ──┐
+DISP2.e ──┼── W25 ── U1 pin 5  (PB4)
+DISP3.e ──┘
+
+DISP1.f ──┐
+DISP2.f ──┼── W26 ── U1 pin 6  (PB5)
+DISP3.f ──┘
+
+DISP1.g ──┐
+DISP2.g ──┼── W27 ── U1 pin 7  (PB6)
+DISP3.g ──┘
+```
+
+### Segment wire table
+
+| Wire | From | To | ATmega32 |
+|------|------|----|----------|
+| W21 | DISP1.a + DISP2.a + DISP3.a (bus) | U1 pin 1 | PB0 |
+| W22 | DISP1.b + DISP2.b + DISP3.b (bus) | U1 pin 2 | PB1 |
+| W23 | DISP1.c + DISP2.c + DISP3.c (bus) | U1 pin 3 | PB2 |
+| W24 | DISP1.d + DISP2.d + DISP3.d (bus) | U1 pin 4 | PB3 |
+| W25 | DISP1.e + DISP2.e + DISP3.e (bus) | U1 pin 5 | PB4 |
+| W26 | DISP1.f + DISP2.f + DISP3.f (bus) | U1 pin 6 | PB5 |
+| W27 | DISP1.g + DISP2.g + DISP3.g (bus) | U1 pin 7 | PB6 |
+
+**In Proteus:** Click segment `a` on DISP1, then click `a` on DISP2, then click `a` on DISP3 — they share one wire. Then connect that wire to PB0.
+
+---
+
+## Step 6 — Digit Select (one COM per display)
+
+| Wire | From | To | Display |
+|------|------|----|---------|
+| W28 | DISP1 COM | U1 pin 14 | Hundreds (PD0) |
+| W29 | DISP2 COM | U1 pin 15 | Tens (PD1) |
+| W30 | DISP3 COM | U1 pin 16 | Units (PD2) |
+
+**Rule:** PD pin = LOW → that digit turns ON | PD pin = HIGH → digit OFF
+
+---
+
+## Step 7 — Complete Circuit (all wires drawn)
+
+```
+                              +5V (POWER)
+                               |
+           +-------------------+-------------------+-------------------+
+           |                   |                   |                   |
+          W3                  W1                  W2                 W4
+           |                   |                   |                   |
+        ┌──┴──┐           ┌────┴─────────────────┴────┐             [R1 10k]
+        │LM35 │           │        ATmega32 (U1)       │                |
+        │ U2  │           │                            │               W11
+        └──┬──┘           │  PB0(1)──W21──┐           │                |
+           |               │  PB1(2)──W22──┤           │                |
+          W20              │  PB2(3)──W23──┤  SEGMENT  │         RESET(9)
+           |               │  PB3(4)──W24──┤   BUS     │                |
+    PA0(40)├───────────────│  PB4(5)──W25──┤           │                |
+           |               │  PB5(6)──W26──┤           │                |
+          W7               │  PB6(7)──W27──┘           │                |
+           |               │                            │                |
+          GND              │  PD0(14)──W28──►DISP1 COM  │                |
+                           │  PD1(15)──W29──►DISP2 COM  │                |
+                           │  PD2(16)──W30──►DISP3 COM  │                |
+                           │                            │                |
+                           │  XTAL1(13)──[Y1]──XTAL2(12)│                |
+                           │              |    |        │                |
+                           │            [C1]  [C2]     │                |
+                           │              |    |        │                |
+                           │             GND  GND       │                |
+                           │  VCC(10)  GND(11)          │                |
+                           └────────────┬───────────────┘                |
+                                        |                                |
+                                       GND                               |
+                                                                         |
+    SEGMENT BUS (W21-W27)                                                |
+         |                                                               |
+    ┌────┴────────────────────────────────────┐                         |
+    |         |         |         |           |                         |
+    |    a    |    b    |    c    |    d      |                         |
+    |    f    |    g    |    e    |           |                         |
+    |         |         |         |           |                         |
+    |      [DISP1]   [DISP2]   [DISP3]        |                         |
+    |      Hundreds   Tens     Units         |                         |
+    |         |         |         |           |                         |
+    |       W28       W29       W30           |                         |
+    |         |         |         |           |                         |
+    |       PD0       PD1       PD2           |                         |
+    └─────────────────────────────────────────┘                         |
+                                                                          |
+    +5V ─────────────────────────────────────────────────────────────────+
+```
+
+---
+
+## Step 8 — Wire Connection Checklist
+
+Tick each wire after connecting in Proteus:
+
+```
+POWER & RESET
+ [ ] W1   +5V  → U1 VCC (pin 10)
+ [ ] W2   +5V  → U1 AVCC (pin 30)
+ [ ] W3   +5V  → LM35 V+ (pin 1)
+ [ ] W4   +5V  → R1 (10k)
+ [ ] W5   GND  → U1 GND (pin 11)
+ [ ] W6   GND  → U1 GND (pin 31)
+ [ ] W7   GND  → LM35 GND (pin 3)
+ [ ] W8   GND  → C1
+ [ ] W9   GND  → C2
+ [ ] W10  GND  → C3
+ [ ] W11  R1   → U1 RESET (pin 9)
+ [ ] W12  +5V  → C3
+ [ ] W13  C3   → GND
+
+CLOCK
+ [ ] W14  U1 XTAL1 (pin 13) → Crystal
+ [ ] W15  U1 XTAL2 (pin 12) → Crystal
+ [ ] W16  Crystal → C1 → GND
+ [ ] W17  C1 → GND
+ [ ] W18  Crystal → C2 → GND
+ [ ] W19  C2 → GND
+
+LM35
+ [ ] W20  LM35 Vout (pin 2) → U1 PA0 (pin 40)
+
+SEGMENTS (bus all 3 displays first, then to MCU)
+ [ ] W21  a bus → U1 PB0 (pin 1)
+ [ ] W22  b bus → U1 PB1 (pin 2)
+ [ ] W23  c bus → U1 PB2 (pin 3)
+ [ ] W24  d bus → U1 PB3 (pin 4)
+ [ ] W25  e bus → U1 PB4 (pin 5)
+ [ ] W26  f bus → U1 PB5 (pin 6)
+ [ ] W27  g bus → U1 PB6 (pin 7)
+
+DIGIT SELECT
+ [ ] W28  DISP1 COM → U1 PD0 (pin 14)
+ [ ] W29  DISP2 COM → U1 PD1 (pin 15)
+ [ ] W30  DISP3 COM → U1 PD2 (pin 16)
+```
+
+**Total wires: 30**
+
+---
+
+## Step 9 — Load Hex File and Run
+
+### Compile
 
 ```bash
 sudo apt install gcc-avr avr-libc binutils-avr
+cd firmware
+make
 ```
 
-### Option B — Atmel Studio / Microchip Studio
+Output: `firmware/digital_thermometer.hex`
 
-Create ATmega32 project → add `main.c` → Build → use generated `.hex` in Proteus.
+### Load into Proteus
+
+1. Double-click **ATmega32 (U1)**
+2. **Program File** → `digital_thermometer.hex`
+3. **Clock Frequency** → `8000000`
+4. Click OK
+
+### Run simulation
+
+1. Press Play ▶
+2. Double-click **LM35** → set **Temperature**
+3. Check display
+
+| LM35 Temperature | Display Shows |
+|------------------|---------------|
+| 25 °C            | 25            |
+| 37 °C            | 37            |
+| 99 °C            | 99            |
 
 ---
 
-## Report flowchart (paste into report)
+## Temperature Formula
 
-See `docs/flowchart.md`
+```
+LM35 output = 10 mV per °C
+Temperature (°C) = ADC_value × 500 / 1024
+```
+
+| Temperature | LM35 Voltage | ADC Value |
+|-------------|--------------|-----------|
+| 25 °C       | 250 mV       | 51        |
+| 37 °C       | 370 mV       | 76        |
+| 99 °C       | 990 mV       | 203       |
 
 ---
 
-## Simulation screenshots to capture
+## Report Checklist
 
-1. Circuit at 25 °C → display shows **025** or **25** (leading zero on hundreds)
-2. Circuit at 37 °C → **037**
-3. Circuit at 99 °C → **099**
-4. Close-up of ADC / LM35 properties panel
+- [ ] Proteus schematic screenshot
+- [ ] Simulation at 25 °C, 37 °C, 99 °C
+- [ ] Flowchart (`docs/flowchart.md`)
+- [ ] C code listing (`firmware/main.c`)
+- [ ] Abstract, Introduction, Methodology, Results, Conclusion
